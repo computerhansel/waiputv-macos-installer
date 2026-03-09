@@ -1,10 +1,8 @@
 #!/bin/bash
 # ============================================================
-# WaipuTV.app Installer für macOS v1.0 (Safari)
-# Kein Chrome benötigt – nutzt Safari via AppleScript
-# ⚠️  Hinweis: waipu.tv verwendet Widevine-DRM für verschlüsselte
-#    Sender. Safari nutzt FairPlay statt Widevine – manche Sender
-#    könnten im Web-Player nicht verfügbar sein.
+# WaipuTV.app Installer für macOS v2.3 (Safari-Branch)
+# WKWebView – kein Browser-Chrome, immer im Vordergrund
+# Login-Session wird persistent gespeichert (wie Safari)
 # ============================================================
 
 APP_NAME="WaipuTV"
@@ -13,10 +11,19 @@ APP_PATH="$INSTALL_DIR/$APP_NAME.app"
 CONTENTS="$APP_PATH/Contents"
 MACOS="$CONTENTS/MacOS"
 
-echo "🎬 WaipuTV.app (Safari) wird installiert..."
+echo "🎬 WaipuTV.app wird installiert..."
 mkdir -p "$MACOS"
 
-# ── Bildschirmgröße einmalig beim Installieren ermitteln ─────
+# ── swiftc prüfen ────────────────────────────────────────────
+if ! command -v swiftc &>/dev/null; then
+  echo ""
+  echo "❌ Xcode Command Line Tools fehlen."
+  echo "   Bitte installieren und danach erneut ausführen:"
+  echo "   xcode-select --install"
+  exit 1
+fi
+
+# ── Bildschirmgröße einmalig ermitteln ───────────────────────
 SCREEN=$(osascript -l JavaScript -e '
   ObjC.import("AppKit");
   const f = $.NSScreen.mainScreen.frame;
@@ -31,8 +38,6 @@ SCREEN_H=$(echo "$SCREEN" | cut -d',' -f2 | tr -d ' ')
 WIN_W=400; WIN_H=300; MARGIN=20; DOCK_OFFSET=80
 WIN_X=$(( SCREEN_W - WIN_W - MARGIN ))
 WIN_Y=$(( SCREEN_H - WIN_H - DOCK_OFFSET ))
-WIN_X2=$(( WIN_X + WIN_W ))
-WIN_Y2=$(( WIN_Y + WIN_H ))
 
 echo "📐 Fenster: ${WIN_W}x${WIN_H} @ (${WIN_X},${WIN_Y}) auf ${SCREEN_W}x${SCREEN_H}"
 
@@ -43,48 +48,124 @@ cat > "$CONTENTS/Info.plist" << 'PLIST'
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleExecutable</key>    <string>WaipuTV</string>
-  <key>CFBundleIdentifier</key>   <string>de.waipu.launcher</string>
-  <key>CFBundleName</key>         <string>WaipuTV</string>
-  <key>CFBundleVersion</key>      <string>1.0</string>
-  <key>CFBundlePackageType</key>  <string>APPL</string>
-  <key>LSMinimumSystemVersion</key><string>12.0</string>
-  <key>NSHighResolutionCapable</key><true/>
+  <key>CFBundleExecutable</key>         <string>WaipuTV</string>
+  <key>CFBundleIdentifier</key>         <string>de.waipu.launcher</string>
+  <key>CFBundleName</key>               <string>WaipuTV</string>
+  <key>CFBundleVersion</key>            <string>2.3</string>
+  <key>CFBundlePackageType</key>        <string>APPL</string>
+  <key>LSMinimumSystemVersion</key>     <string>12.0</string>
+  <key>NSHighResolutionCapable</key>    <true/>
+  <key>NSAppTransportSecurity</key>
+    <dict><key>NSAllowsArbitraryLoads</key><true/></dict>
 </dict>
 </plist>
 PLIST
 
-# ── Haupt-Executable ────────────────────────────────────────
-# Fensterposition als Konstanten einbacken → kein Overhead beim Start
-{
-  echo "#!/bin/bash"
-  echo "WIN_X=${WIN_X}"
-  echo "WIN_Y=${WIN_Y}"
-  echo "WIN_X2=${WIN_X2}"
-  echo "WIN_Y2=${WIN_Y2}"
-  cat << 'LAUNCHER'
+# ── Swift-Quelle generieren (Position als Konstanten einbacken) ──
+SWIFT_SRC=$(mktemp /tmp/waiputv_XXXXXX.swift)
 
-LOG="$(dirname "$0")/../waipu.log"
-echo "$(date): Start" >> "$LOG"
+# Kein 'SWIFT' (unquoted) → Shell expandiert ${WIN_X} etc. jetzt
+cat > "$SWIFT_SRC" << SWIFT
+import AppKit
+import WebKit
 
-# Safari öffnen, URL laden, Fenster positionieren
-osascript \
-  -e 'tell application "Safari"' \
-  -e '  activate' \
-  -e '  if (count of windows) is 0 then' \
-  -e '    make new document with properties {URL:"https://play.waipu.tv/rtl"}' \
-  -e '  else' \
-  -e '    set URL of current tab of front window to "https://play.waipu.tv/rtl"' \
-  -e '  end if' \
-  -e "  set bounds of front window to {$WIN_X, $WIN_Y, $WIN_X2, $WIN_Y2}" \
-  -e 'end tell' \
-  >> "$LOG" 2>&1
-LAUNCHER
-} > "$MACOS/WaipuTV"
+// Position eingebacken beim Install – kein Overhead beim Start
+let fixedX: CGFloat    = ${WIN_X}
+let fixedYTop: CGFloat = ${WIN_Y}   // von oben (CSS/Chrome-Koordinaten)
+let fixedW: CGFloat    = ${WIN_W}
+let fixedH: CGFloat    = ${WIN_H}
+let screenH: CGFloat   = ${SCREEN_H}
 
-chmod +x "$MACOS/WaipuTV"
+func makeAppIcon() -> NSImage {
+    let size: CGFloat = 256
+    let icon = NSImage(size: NSSize(width: size, height: size))
+    icon.lockFocus()
 
-# ── Launch Services registrieren → Spotlight & Launchpad ─────
+    // Blauer abgerundeter Hintergrund
+    NSColor(red: 0.04, green: 0.40, blue: 0.90, alpha: 1).setFill()
+    NSBezierPath(roundedRect: NSRect(x: 0, y: 0, width: size, height: size),
+                 xRadius: 50, yRadius: 50).fill()
+
+    // TV-Symbol (SF Symbol) weiß zentriert
+    if let sym = NSImage(systemSymbolName: "tv.fill", accessibilityDescription: nil) {
+        let cfg = NSImage.SymbolConfiguration(pointSize: 130, weight: .medium)
+        let s   = sym.withSymbolConfiguration(cfg) ?? sym
+        NSColor.white.set()
+        let sw = s.size.width, sh = s.size.height
+        s.draw(in: NSRect(x: (size - sw) / 2, y: (size - sh) / 2, width: sw, height: sh),
+               from: .zero, operation: .sourceOver, fraction: 1)
+    }
+    icon.unlockFocus()
+    return icon
+}
+
+class WaipuDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
+    var window: NSWindow!
+    var webView: WKWebView!
+
+    func applicationDidFinishLaunching(_ n: Notification) {
+        // App-Icon setzen (Dock + App-Switcher)
+        NSApp.applicationIconImage = makeAppIcon()
+
+        // NSWindow: Ursprung unten-links → umrechnen
+        let actualScreenH = NSScreen.main?.frame.height ?? screenH
+        let nsY = actualScreenH - fixedYTop - fixedH
+
+        window = NSWindow(
+            contentRect: NSRect(x: fixedX, y: nsY, width: fixedW, height: fixedH),
+            styleMask: [.titled, .closable, .resizable, .miniaturizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "WaipuTV"
+        window.level = .floating                              // immer im Vordergrund
+        window.collectionBehavior = [.canJoinAllSpaces,       // alle Spaces
+                                     .fullScreenAuxiliary]    // über Vollbild-Apps
+
+        let cfg = WKWebViewConfiguration()
+        cfg.allowsInlineMediaPlayback = true
+        cfg.mediaTypesRequiringUserActionForPlayback = []
+        // Gleiche persistente Session wie Safari (Login bleibt erhalten)
+        cfg.websiteDataStore = WKWebsiteDataStore.default()
+
+        webView = WKWebView(frame: NSRect(origin: .zero,
+                                         size: NSSize(width: fixedW, height: fixedH)),
+                            configuration: cfg)
+        webView.autoresizingMask         = [.width, .height]
+        webView.navigationDelegate       = self
+        // Safari-UserAgent → waipu.tv erkennt uns als Safari
+        webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6.1 Safari/605.1.15"
+        webView.load(URLRequest(url: URL(string: "https://play.waipu.tv/rtl")!))
+
+        window.contentView!.addSubview(webView)
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ s: NSApplication) -> Bool { true }
+}
+
+let app      = NSApplication.shared
+app.setActivationPolicy(.regular)
+let delegate = WaipuDelegate()
+app.delegate = delegate
+app.run()
+SWIFT
+
+# ── Kompilieren ──────────────────────────────────────────────
+echo "⚙️  Kompiliere WaipuTV (einmalig, ~10–30s auf älteren Macs)..."
+if swiftc -O -o "$MACOS/WaipuTV" "$SWIFT_SRC" 2>/tmp/waiputv_err.txt; then
+  strip "$MACOS/WaipuTV" 2>/dev/null || true
+  echo "✅ Kompilierung erfolgreich"
+else
+  echo "❌ Kompilierung fehlgeschlagen:"
+  cat /tmp/waiputv_err.txt
+  rm -f "$SWIFT_SRC" /tmp/waiputv_err.txt
+  exit 1
+fi
+rm -f "$SWIFT_SRC" /tmp/waiputv_err.txt
+
+# ── Launch Services registrieren ────────────────────────────
 LSREG="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 "$LSREG" -f "$APP_PATH" 2>/dev/null || true
 
@@ -92,14 +173,10 @@ LSREG="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServic
 xattr -rd com.apple.quarantine "$APP_PATH" 2>/dev/null || true
 
 echo ""
-echo "✅ WaipuTV.app (Safari) installiert:"
+echo "✅ WaipuTV.app installiert:"
 echo "   $APP_PATH"
 echo ""
-echo "ℹ️  Safari-Login: Melde dich beim ersten Start im Fenster bei waipu.tv an."
-echo "   Safari speichert die Session automatisch."
-echo ""
-echo "⚠️  DRM-Hinweis: Einige verschlüsselte Sender könnten in Safari"
-echo "   nicht verfügbar sein (Widevine vs. FairPlay)."
+echo "ℹ️  Beim ersten Start bitte bei waipu.tv einloggen – Session wird gespeichert."
 echo ""
 
 read -p "   Soll WaipuTV zum Dock hinzugefügt werden? (j/n) " -n 1 -r
