@@ -93,21 +93,13 @@ func makeAppIcon() -> NSImage {
        let img = NSImage(contentsOf: url) {
         return img
     }
-    // Fallback: blauer Hintergrund mit SF Symbol
+    // Fallback: einfaches blaues Rechteck (kompatibel ab macOS 10.x)
     let size: CGFloat = 256
     let icon = NSImage(size: NSSize(width: size, height: size))
     icon.lockFocus()
     NSColor(red: 0.04, green: 0.40, blue: 0.90, alpha: 1).setFill()
     NSBezierPath(roundedRect: NSRect(x: 0, y: 0, width: size, height: size),
                  xRadius: 50, yRadius: 50).fill()
-    if let sym = NSImage(systemSymbolName: "tv.fill", accessibilityDescription: nil) {
-        let cfg = NSImage.SymbolConfiguration(pointSize: 130, weight: .medium)
-        let s   = sym.withSymbolConfiguration(cfg) ?? sym
-        NSColor.white.set()
-        let sw = s.size.width, sh = s.size.height
-        s.draw(in: NSRect(x: (size - sw) / 2, y: (size - sh) / 2, width: sw, height: sh),
-               from: .zero, operation: .sourceOver, fraction: 1)
-    }
     icon.unlockFocus()
     return icon
 }
