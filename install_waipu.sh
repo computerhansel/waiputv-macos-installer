@@ -63,7 +63,7 @@ cat > "$CONTENTS/Info.plist" << 'PLIST'
   <key>CFBundleName</key>               <string>WaipuTV</string>
   <key>CFBundleVersion</key>            <string>2.3</string>
   <key>CFBundlePackageType</key>        <string>APPL</string>
-  <key>LSMinimumSystemVersion</key>     <string>12.0</string>
+  <key>LSMinimumSystemVersion</key>     <string>10.15</string>
   <key>NSHighResolutionCapable</key>    <true/>
   <key>CFBundleIconFile</key>           <string>AppIcon</string>
   <key>NSAppTransportSecurity</key>
@@ -214,12 +214,15 @@ class WaipuDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNaviga
 
         let cfg = WKWebViewConfiguration()
         cfg.websiteDataStore = WKWebsiteDataStore.default()
+        // DRM / Encrypted Media Extensions aktivieren (Widevine für Premium-Sender)
+        cfg.preferences.setValue(true, forKey: "encryptedMediaAPIEnabled")
+        cfg.preferences.setValue(true, forKey: "mediaDevicesEnabled")
 
         // WebView füllt gesamtes contentView (inkl. Titelleisten-Bereich)
         webView = WKWebView(frame: window.contentView!.bounds, configuration: cfg)
         webView.autoresizingMask = [.width, .height]
         webView.navigationDelegate = self
-        webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6.1 Safari/605.1.15"
+        webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.3 Safari/605.1.15"
         webView.load(URLRequest(url: URL(string: "https://play.waipu.tv/rtl")!))
         window.contentView!.addSubview(webView)
 
