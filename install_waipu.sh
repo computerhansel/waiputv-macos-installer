@@ -99,43 +99,84 @@ func makeAppIcon() -> NSImage {
     return icon
 }
 
+// Unsichtbare Zone oben – erkennt Hover für Traffic-Lights
+class HoverZone: NSView {
+    var onEnter: (() -> Void)?
+    var onExit:  (() -> Void)?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach { removeTrackingArea($0) }
+        addTrackingArea(NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self, userInfo: nil
+        ))
+    }
+    // Klicks durchlassen an WebView
+    override func hitTest(_ p: NSPoint) -> NSView? { nil }
+    override func mouseEntered(with e: NSEvent) { onEnter?() }
+    override func mouseExited(with e: NSEvent)  { onExit?()  }
+}
+
 class WaipuDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     var window: NSWindow!
     var webView: WKWebView!
 
+    func setButtons(visible: Bool) {
+        let alpha: CGFloat = visible ? 1 : 0
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.18
+            for type in [NSWindow.ButtonType.closeButton,
+                         .miniaturizeButton, .zoomButton] {
+                window.standardWindowButton(type)?.animator().alphaValue = alpha
+            }
+        }
+    }
+
     func applicationDidFinishLaunching(_ n: Notification) {
-        // App-Icon setzen (Dock + App-Switcher)
         NSApp.applicationIconImage = makeAppIcon()
 
-        // NSWindow: Ursprung unten-links → umrechnen
         let actualScreenH = NSScreen.main?.frame.height ?? screenH
         let nsY = actualScreenH - fixedYTop - fixedH
 
         window = NSWindow(
             contentRect: NSRect(x: fixedX, y: nsY, width: fixedW, height: fixedH),
-            styleMask: [.titled, .closable, .resizable, .miniaturizable],
+            // fullSizeContentView: WebView füllt gesamtes Fenster inkl. Titelleisten-Bereich
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
-        window.title = "WaipuTV"
-        window.level = .floating                              // immer im Vordergrund
-        window.collectionBehavior = [.canJoinAllSpaces,       // alle Spaces
-                                     .fullScreenAuxiliary]    // über Vollbild-Apps
+        window.title = ""
+        window.titleVisibility          = .hidden
+        window.titlebarAppearsTransparent = true
+        window.isMovableByWindowBackground = true
+        window.level = .floating
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+
+        // Traffic-Lights initial ausblenden
+        setButtons(visible: false)
 
         let cfg = WKWebViewConfiguration()
-        // Gleiche persistente Session wie Safari (Login bleibt erhalten)
         cfg.websiteDataStore = WKWebsiteDataStore.default()
 
-        webView = WKWebView(frame: NSRect(origin: .zero,
-                                         size: NSSize(width: fixedW, height: fixedH)),
-                            configuration: cfg)
-        webView.autoresizingMask         = [.width, .height]
-        webView.navigationDelegate       = self
-        // Safari-UserAgent → waipu.tv erkennt uns als Safari
+        // WebView füllt gesamtes contentView (inkl. Titelleisten-Bereich)
+        webView = WKWebView(frame: window.contentView!.bounds, configuration: cfg)
+        webView.autoresizingMask = [.width, .height]
+        webView.navigationDelegate = self
         webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6.1 Safari/605.1.15"
         webView.load(URLRequest(url: URL(string: "https://play.waipu.tv/rtl")!))
-
         window.contentView!.addSubview(webView)
+
+        // Hover-Zone über dem Titelleisten-Bereich (oben 28pt)
+        let cv = window.contentView!
+        let hz = HoverZone(frame: NSRect(x: 0, y: cv.bounds.height - 28,
+                                         width: cv.bounds.width, height: 28))
+        hz.autoresizingMask = [.width, .minYMargin]  // bleibt oben beim Resize
+        hz.onEnter = { [weak self] in self?.setButtons(visible: true)  }
+        hz.onExit  = { [weak self] in self?.setButtons(visible: false) }
+        cv.addSubview(hz)
+
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
