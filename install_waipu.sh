@@ -13,6 +13,16 @@ MACOS="$CONTENTS/MacOS"
 
 echo "🎬 WaipuTV.app wird installiert..."
 mkdir -p "$MACOS"
+mkdir -p "$CONTENTS/Resources"
+
+# ── App-Icon kopieren ─────────────────────────────────────────
+ICON_SRC="/Users/toto/Desktop/wtv.png"
+if [[ -f "$ICON_SRC" ]]; then
+  cp "$ICON_SRC" "$CONTENTS/Resources/AppIcon.png"
+  echo "🖼️  Icon kopiert: AppIcon.png"
+else
+  echo "⚠️  Icon nicht gefunden: $ICON_SRC (Fallback wird verwendet)"
+fi
 
 # ── swiftc prüfen ────────────────────────────────────────────
 if ! command -v swiftc &>/dev/null; then
@@ -55,6 +65,7 @@ cat > "$CONTENTS/Info.plist" << 'PLIST'
   <key>CFBundlePackageType</key>        <string>APPL</string>
   <key>LSMinimumSystemVersion</key>     <string>12.0</string>
   <key>NSHighResolutionCapable</key>    <true/>
+  <key>CFBundleIconFile</key>           <string>AppIcon</string>
   <key>NSAppTransportSecurity</key>
     <dict><key>NSAllowsArbitraryLoads</key><true/></dict>
 </dict>
@@ -77,16 +88,18 @@ let fixedH: CGFloat    = ${WIN_H}
 let screenH: CGFloat   = ${SCREEN_H}
 
 func makeAppIcon() -> NSImage {
+    // PNG-Icon aus Bundle laden
+    if let url = Bundle.main.url(forResource: "AppIcon", withExtension: "png"),
+       let img = NSImage(contentsOf: url) {
+        return img
+    }
+    // Fallback: blauer Hintergrund mit SF Symbol
     let size: CGFloat = 256
     let icon = NSImage(size: NSSize(width: size, height: size))
     icon.lockFocus()
-
-    // Blauer abgerundeter Hintergrund
     NSColor(red: 0.04, green: 0.40, blue: 0.90, alpha: 1).setFill()
     NSBezierPath(roundedRect: NSRect(x: 0, y: 0, width: size, height: size),
                  xRadius: 50, yRadius: 50).fill()
-
-    // TV-Symbol (SF Symbol) weiß zentriert
     if let sym = NSImage(systemSymbolName: "tv.fill", accessibilityDescription: nil) {
         let cfg = NSImage.SymbolConfiguration(pointSize: 130, weight: .medium)
         let s   = sym.withSymbolConfiguration(cfg) ?? sym
