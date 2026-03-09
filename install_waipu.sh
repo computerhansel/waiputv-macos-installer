@@ -119,12 +119,19 @@ class HoverZone: NSView {
     override func mouseExited(with e: NSEvent)  { onExit?()  }
 }
 
-class WaipuDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
+class WaipuDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate {
     var window: NSWindow!
     var webView: WKWebView!
     var isDragging = false
     var dragStartScreen = NSPoint.zero
     var dragStartFrame  = NSRect.zero
+
+    // Fensterposition speichern
+    func windowDidMove(_ n: Notification) {
+        guard let win = window else { return }
+        UserDefaults.standard.set(Double(win.frame.origin.x), forKey: "savedX")
+        UserDefaults.standard.set(Double(win.frame.origin.y), forKey: "savedY")
+    }
 
     // Fenster per Drag am Titelbereich verschieben (WKWebView blockiert isMovableByWindowBackground)
     func setupDragMonitor() {
@@ -171,10 +178,14 @@ class WaipuDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         NSApp.applicationIconImage = makeAppIcon()
 
         let actualScreenH = NSScreen.main?.frame.height ?? screenH
-        let nsY = actualScreenH - fixedYTop - fixedH
+        let defaults = UserDefaults.standard
+        let nsX = defaults.object(forKey: "savedX") != nil
+            ? CGFloat(defaults.double(forKey: "savedX")) : fixedX
+        let nsY = defaults.object(forKey: "savedY") != nil
+            ? CGFloat(defaults.double(forKey: "savedY")) : actualScreenH - fixedYTop - fixedH
 
         window = NSWindow(
-            contentRect: NSRect(x: fixedX, y: nsY, width: fixedW, height: fixedH),
+            contentRect: NSRect(x: nsX, y: nsY, width: fixedW, height: fixedH),
             // fullSizeContentView: WebView füllt gesamtes Fenster inkl. Titelleisten-Bereich
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
@@ -209,6 +220,7 @@ class WaipuDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         hz.onExit  = { [weak self] in self?.setButtons(visible: false) }
         cv.addSubview(hz)
 
+        window.delegate = self
         setupDragMonitor()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
