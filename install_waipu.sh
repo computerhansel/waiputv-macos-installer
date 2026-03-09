@@ -128,10 +128,12 @@ class WaipuDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNaviga
 
     let prefs = UserDefaults(suiteName: "de.waipu.launcher") ?? .standard
 
-    func savePosition() {
+    func saveFrame() {
         guard let win = window else { return }
         prefs.set(Double(win.frame.origin.x), forKey: "savedX")
         prefs.set(Double(win.frame.origin.y), forKey: "savedY")
+        prefs.set(Double(win.frame.size.width),  forKey: "savedW")
+        prefs.set(Double(win.frame.size.height), forKey: "savedH")
     }
 
     // Fenster per Drag am Titelbereich verschieben (WKWebView blockiert isMovableByWindowBackground)
@@ -157,7 +159,7 @@ class WaipuDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNaviga
                 return nil  // Event konsumieren
             case .leftMouseUp where self.isDragging:
                 self.isDragging = false
-                self.savePosition()
+                self.saveFrame()
                 return event
             default:
                 return event
@@ -181,13 +183,14 @@ class WaipuDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNaviga
 
         let actualScreenH = NSScreen.main?.frame.height ?? screenH
         let defaults = UserDefaults(suiteName: "de.waipu.launcher") ?? .standard
-        let nsX = defaults.object(forKey: "savedX") != nil
-            ? CGFloat(defaults.double(forKey: "savedX")) : fixedX
-        let nsY = defaults.object(forKey: "savedY") != nil
-            ? CGFloat(defaults.double(forKey: "savedY")) : actualScreenH - fixedYTop - fixedH
+        let hasSaved = defaults.object(forKey: "savedX") != nil
+        let nsX = hasSaved ? CGFloat(defaults.double(forKey: "savedX")) : fixedX
+        let nsY = hasSaved ? CGFloat(defaults.double(forKey: "savedY")) : actualScreenH - fixedYTop - fixedH
+        let nsW = hasSaved ? CGFloat(defaults.double(forKey: "savedW")) : fixedW
+        let nsH = hasSaved ? CGFloat(defaults.double(forKey: "savedH")) : fixedH
 
         window = NSWindow(
-            contentRect: NSRect(x: nsX, y: nsY, width: fixedW, height: fixedH),
+            contentRect: NSRect(x: nsX, y: nsY, width: nsW, height: nsH),
             // fullSizeContentView: WebView füllt gesamtes Fenster inkl. Titelleisten-Bereich
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
@@ -229,7 +232,8 @@ class WaipuDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNaviga
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ s: NSApplication) -> Bool { true }
-    func windowWillClose(_ n: Notification) { savePosition() }
+    func windowWillClose(_ n: Notification)  { saveFrame() }
+    func windowDidResize(_ n: Notification)  { saveFrame() }
 }
 
 let app      = NSApplication.shared
