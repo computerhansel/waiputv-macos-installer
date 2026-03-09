@@ -220,7 +220,7 @@ class WaipuDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNaviga
         webView.autoresizingMask = [.width, .height]
         webView.navigationDelegate = self
         webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.3 Safari/605.1.15"
-        webView.load(URLRequest(url: URL(string: "https://play.waipu.tv/rtl")!))
+        webView.load(URLRequest(url: URL(string: "https://play.waipu.tv/zdf")!))
         window.contentView!.addSubview(webView)
 
         // Hover-Zone über dem Titelleisten-Bereich (oben 28pt)
