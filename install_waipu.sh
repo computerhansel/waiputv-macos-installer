@@ -126,11 +126,12 @@ class WaipuDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNaviga
     var dragStartScreen = NSPoint.zero
     var dragStartFrame  = NSRect.zero
 
-    // Fensterposition speichern
-    func windowDidMove(_ n: Notification) {
+    let prefs = UserDefaults(suiteName: "de.waipu.launcher") ?? .standard
+
+    func savePosition() {
         guard let win = window else { return }
-        UserDefaults.standard.set(Double(win.frame.origin.x), forKey: "savedX")
-        UserDefaults.standard.set(Double(win.frame.origin.y), forKey: "savedY")
+        prefs.set(Double(win.frame.origin.x), forKey: "savedX")
+        prefs.set(Double(win.frame.origin.y), forKey: "savedY")
     }
 
     // Fenster per Drag am Titelbereich verschieben (WKWebView blockiert isMovableByWindowBackground)
@@ -156,6 +157,7 @@ class WaipuDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNaviga
                 return nil  // Event konsumieren
             case .leftMouseUp where self.isDragging:
                 self.isDragging = false
+                self.savePosition()
                 return event
             default:
                 return event
@@ -178,7 +180,7 @@ class WaipuDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNaviga
         NSApp.applicationIconImage = makeAppIcon()
 
         let actualScreenH = NSScreen.main?.frame.height ?? screenH
-        let defaults = UserDefaults.standard
+        let defaults = UserDefaults(suiteName: "de.waipu.launcher") ?? .standard
         let nsX = defaults.object(forKey: "savedX") != nil
             ? CGFloat(defaults.double(forKey: "savedX")) : fixedX
         let nsY = defaults.object(forKey: "savedY") != nil
@@ -227,6 +229,7 @@ class WaipuDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNaviga
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ s: NSApplication) -> Bool { true }
+    func windowWillClose(_ n: Notification) { savePosition() }
 }
 
 let app      = NSApplication.shared
