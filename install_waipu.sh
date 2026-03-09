@@ -183,11 +183,13 @@ class WaipuDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNaviga
 
         let actualScreenH = NSScreen.main?.frame.height ?? screenH
         let defaults = UserDefaults(suiteName: "de.waipu.launcher") ?? .standard
-        let hasSaved = defaults.object(forKey: "savedX") != nil
+        let savedW = CGFloat(defaults.double(forKey: "savedW"))
+        let savedH = CGFloat(defaults.double(forKey: "savedH"))
+        let hasSaved = defaults.object(forKey: "savedX") != nil && savedW > 50 && savedH > 50
         let nsX = hasSaved ? CGFloat(defaults.double(forKey: "savedX")) : fixedX
         let nsY = hasSaved ? CGFloat(defaults.double(forKey: "savedY")) : actualScreenH - fixedYTop - fixedH
-        let nsW = hasSaved ? CGFloat(defaults.double(forKey: "savedW")) : fixedW
-        let nsH = hasSaved ? CGFloat(defaults.double(forKey: "savedH")) : fixedH
+        let nsW = hasSaved ? savedW : fixedW
+        let nsH = hasSaved ? savedH : fixedH
 
         window = NSWindow(
             contentRect: NSRect(x: nsX, y: nsY, width: nsW, height: nsH),
