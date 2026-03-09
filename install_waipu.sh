@@ -123,8 +123,6 @@ class WaipuDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
                                      .fullScreenAuxiliary]    // über Vollbild-Apps
 
         let cfg = WKWebViewConfiguration()
-        cfg.allowsInlineMediaPlayback = true
-        cfg.mediaTypesRequiringUserActionForPlayback = []
         // Gleiche persistente Session wie Safari (Login bleibt erhalten)
         cfg.websiteDataStore = WKWebsiteDataStore.default()
 
