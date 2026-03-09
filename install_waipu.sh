@@ -214,9 +214,6 @@ class WaipuDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNaviga
 
         let cfg = WKWebViewConfiguration()
         cfg.websiteDataStore = WKWebsiteDataStore.default()
-        // DRM / Encrypted Media Extensions aktivieren (Widevine für Premium-Sender)
-        cfg.preferences.setValue(true, forKey: "encryptedMediaAPIEnabled")
-        cfg.preferences.setValue(true, forKey: "mediaDevicesEnabled")
 
         // WebView füllt gesamtes contentView (inkl. Titelleisten-Bereich)
         webView = WKWebView(frame: window.contentView!.bounds, configuration: cfg)
