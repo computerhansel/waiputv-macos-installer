@@ -122,6 +122,39 @@ class HoverZone: NSView {
 class WaipuDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     var window: NSWindow!
     var webView: WKWebView!
+    var isDragging = false
+    var dragStartScreen = NSPoint.zero
+    var dragStartFrame  = NSRect.zero
+
+    // Fenster per Drag am Titelbereich verschieben (WKWebView blockiert isMovableByWindowBackground)
+    func setupDragMonitor() {
+        NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp]) { [weak self] event in
+            guard let self = self, let win = self.window else { return event }
+            switch event.type {
+            case .leftMouseDown:
+                let loc = event.locationInWindow
+                let titleBarY = (win.contentView?.bounds.height ?? fixedH) - 28
+                if loc.y >= titleBarY {
+                    self.isDragging      = true
+                    self.dragStartScreen = NSEvent.mouseLocation
+                    self.dragStartFrame  = win.frame
+                }
+                return event
+            case .leftMouseDragged where self.isDragging:
+                let cur = NSEvent.mouseLocation
+                win.setFrameOrigin(NSPoint(
+                    x: self.dragStartFrame.origin.x + cur.x - self.dragStartScreen.x,
+                    y: self.dragStartFrame.origin.y + cur.y - self.dragStartScreen.y
+                ))
+                return nil  // Event konsumieren
+            case .leftMouseUp where self.isDragging:
+                self.isDragging = false
+                return event
+            default:
+                return event
+            }
+        }
+    }
 
     func setButtons(visible: Bool) {
         let alpha: CGFloat = visible ? 1 : 0
@@ -150,7 +183,6 @@ class WaipuDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         window.title = ""
         window.titleVisibility          = .hidden
         window.titlebarAppearsTransparent = true
-        window.isMovableByWindowBackground = true
         window.level = .floating
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
 
@@ -177,6 +209,7 @@ class WaipuDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         hz.onExit  = { [weak self] in self?.setButtons(visible: false) }
         cv.addSubview(hz)
 
+        setupDragMonitor()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
